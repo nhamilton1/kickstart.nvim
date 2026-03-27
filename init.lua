@@ -158,6 +158,9 @@ vim.o.cursorline = true
 
 -- Minimal number of screen lines to keep above and below the cursor.
 vim.o.scrolloff = 10
+vim.o.tabstop = 2
+vim.o.shiftwidth = 2
+vim.o.expandtab = true
 
 -- if performing an operation that would fail due to unsaved changes in the buffer (like `:q`),
 -- instead raise a dialog asking if you wish to save the current file(s)
@@ -188,6 +191,17 @@ vim.diagnostic.config {
 }
 
 vim.keymap.set('n', '<leader>q', vim.diagnostic.setloclist, { desc = 'Open diagnostic [Q]uickfix list' })
+
+-- Git keymaps
+vim.keymap.set('n', '<leader>gs', function()
+  require('telescope.builtin').git_status {
+    previewer = require('telescope.previewers').new_termopen_previewer {
+      get_command = function(entry)
+        return { 'git', 'diff', 'HEAD', '--', entry.value }
+      end,
+    },
+  }
+end, { desc = '[G]it [S]tatus with diff' })
 
 -- Exit terminal mode in the builtin terminal with a shortcut that is a bit easier
 -- for people to discover. Otherwise, you normally need to press <C-\><C-n>, which
@@ -661,6 +675,43 @@ require('lazy').setup({
         vim.lsp.config(name, server)
         vim.lsp.enable(name)
       end
+      require('mason-lspconfig').setup {
+        ensure_installed = {}, -- explicitly set to an empty table (Kickstart populates installs via mason-tool-installer)
+        automatic_installation = false,
+        handlers = {
+          function(server_name)
+            local server = servers[server_name] or {}
+            -- This handles overriding only values explicitly passed
+            -- by the server configuration above. Useful when disabling
+            -- certain features of an LSP (for example, turning off formatting for ts_ls)
+            server.capabilities = vim.tbl_deep_extend('force', {}, capabilities, server.capabilities or {})
+            require('lspconfig')[server_name].setup(server)
+          end,
+          ['vtsls'] = function()
+            require('lspconfig').vtsls.setup {
+              root_dir = require('lspconfig').util.root_pattern(
+                '.git',
+                'pnpm-workspace.yaml',
+                'pnpm-lock.yaml',
+                'yarn.lock',
+                'package-lock.json',
+                'bun.lockb',
+                'bun.lock'
+              ),
+              typescript = {
+                tsserver = {
+                  maxTsServerMemory = 12288,
+                },
+              },
+              experimental = {
+                completion = {
+                  entriesLimit = 3,
+                },
+              },
+            }
+          end,
+        },
+      }
     end,
   },
 
@@ -694,13 +745,26 @@ require('lazy').setup({
           }
         end
       end,
+      formatters = {
+        prettierd = {
+          args = { '--plugin-search-dir=.', '$FILENAME' },
+        },
+      },
       formatters_by_ft = {
         lua = { 'stylua' },
         -- Conform can also run multiple formatters sequentially
         -- python = { "isort", "black" },
         --
         -- You can use 'stop_after_first' to run the first available formatter from the list
-        -- javascript = { "prettierd", "prettier", stop_after_first = true },
+        javascript = { 'prettierd' },
+        javascriptreact = { 'prettierd' },
+        typescript = { 'prettierd' },
+        typescriptreact = { 'prettierd' },
+        json = { 'prettierd' },
+        yaml = { 'prettierd' },
+        markdown = { 'prettierd' },
+        html = { 'prettierd' },
+        css = { 'prettierd' },
       },
     },
   },
@@ -708,7 +772,7 @@ require('lazy').setup({
   { -- Autocompletion
     'saghen/blink.cmp',
     event = 'VimEnter',
-    version = '1.*',
+    version = '2.*',
     dependencies = {
       -- Snippet Engine
       {
@@ -760,7 +824,7 @@ require('lazy').setup({
         -- <c-k>: Toggle signature help
         --
         -- See :h blink-cmp-config-keymap for defining your own keymap
-        preset = 'default',
+        preset = 'super-tab',
 
         -- For more advanced Luasnip keymaps (e.g. selecting choice nodes, expansion) see:
         --    https://github.com/L3MON4D3/LuaSnip?tab=readme-ov-file#keymaps
@@ -871,33 +935,56 @@ require('lazy').setup({
     'nvim-treesitter/nvim-treesitter',
     lazy = false,
     build = ':TSUpdate',
-    branch = 'main',
-    -- [[ Configure Treesitter ]] See `:help nvim-treesitter-intro`
-    config = function()
-      local parsers = { 'bash', 'c', 'diff', 'html', 'lua', 'luadoc', 'markdown', 'markdown_inline', 'query', 'vim', 'vimdoc' }
-      require('nvim-treesitter').install(parsers)
-      vim.api.nvim_create_autocmd('FileType', {
-        callback = function(args)
-          local buf, filetype = args.buf, args.match
+    main = 'nvim-treesitter.configs', -- Sets main module to use for opts
+    -- [[ Configure Treesitter ]] See `:help nvim-treesitter`
+    opts = {
+      ensure_installed = {
+        'bash',
+        'c',
+        'diff',
+        'html',
+        'lua',
+        'luadoc',
+        'markdown',
+        'markdown_inline',
+        'query',
+        'vim',
+        'vimdoc',
+        'typescript',
+        'tsx',
+        'go',
+      },
+      -- Autoinstall languages that are not installed
+      auto_install = true,
+      highlight = {
+        enable = true,
+        -- Some languages depend on vim's regex highlighting system (such as Ruby) for indent rules.
+        --  If you are experiencing weird indenting issues, add the language to
+        --  the list of additional_vim_regex_highlighting and disabled languages for indent.
+        additional_vim_regex_highlighting = { 'ruby' },
+      },
+      indent = { enable = true, disable = { 'ruby' } },
+    },
+    -- There are additional nvim-treesitter modules that you can use to interact
+    -- with nvim-treesitter. You should go explore a few and see what interests you:
+    --
+    --    - Incremental selection: Included, see `:help nvim-treesitter-incremental-selection-mod`
+    --    - Show your current context: https://github.com/nvim-treesitter/nvim-treesitter-context
+    --    - Treesitter + textobjects: https://github.com/nvim-treesitter/nvim-treesitter-textobjects
+  },
 
-          local language = vim.treesitter.language.get_lang(filetype)
-          if not language then return end
-
-          -- check if parser exists and load it
-          if not vim.treesitter.language.add(language) then return end
-          -- enables syntax highlighting and other treesitter features
-          vim.treesitter.start(buf, language)
-
-          -- enables treesitter based folds
-          -- for more info on folds see `:help folds`
-          -- vim.wo.foldexpr = 'v:lua.vim.treesitter.foldexpr()'
-          -- vim.wo.foldmethod = 'expr'
-
-          -- enables treesitter based indentation
-          vim.bo.indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
-        end,
-      })
-    end,
+  {
+    'nvim-treesitter/nvim-treesitter-context',
+    dependencies = { 'nvim-treesitter/nvim-treesitter' },
+    opts = {
+      enable = true,
+      max_lines = 3, -- How many lines the window should span
+      min_window_height = 0, -- Minimum editor window height to enable context
+      line_numbers = true,
+      multiline_threshold = 20, -- Maximum number of lines to show for a single context
+      trim_scope = 'outer', -- Which context lines to discard if `max_lines` is exceeded
+      mode = 'cursor',  -- Line used to calculate context. Choices: 'cursor', 'topline'
+    }
   },
 
   -- The following comments only work if you have downloaded the kickstart repo, not just copy pasted the
@@ -920,7 +1007,7 @@ require('lazy').setup({
   --    This is the easiest way to modularize your config.
   --
   --  Uncomment the following line and add your plugins to `lua/custom/plugins/*.lua` to get going.
-  -- { import = 'custom.plugins' },
+  { import = 'custom.plugins' },
   --
   -- For additional information with loading, sourcing and examples see `:help lazy.nvim-🔌-plugin-spec`
   -- Or use telescope!
