@@ -9,10 +9,6 @@ return {
     { '<leader>ff', '<cmd>NvimTreeFindFile<cr>', desc = 'Find file in tree' },
   },
   opts = {
-    filters = {
-      custom = { '.git', 'node_modules', '.vscode' },
-      dotfiles = true,
-    },
     git = {},
     view = {
       adaptive_size = true,
