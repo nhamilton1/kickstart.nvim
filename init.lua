@@ -788,6 +788,7 @@ require('lazy').setup({
     event = 'VimEnter',
     version = '2.*',
     dependencies = {
+      'saghen/blink.lib',
       -- Snippet Engine
       {
         'L3MON4D3/LuaSnip',
