@@ -9,7 +9,9 @@ return {
     { '<leader>ff', '<cmd>NvimTreeFindFile<cr>', desc = 'Find file in tree' },
   },
   opts = {
-    git = {},
+    git = {
+      ignore = false,
+    },
     view = {
       adaptive_size = true,
       float = {
